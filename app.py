@@ -201,9 +201,7 @@ def parse_medical_report(text: str):
         "executive_summary": {"top_priorities": [], "key_strengths": []},
         "system_analysis": {},
         "personalized_action_plan": {},
-        "interaction_alerts": [],
-        "normal_ranges": {},
-        "biomarker_table": []
+        "interaction_alerts": []
     }
 
     # --- Executive Summary ---
@@ -237,51 +235,6 @@ def parse_medical_report(text: str):
         alerts_block = alerts_match.group(1)
         alerts = [clean_line(a) for a in alerts_block.splitlines() if clean_line(a)]
         data["interaction_alerts"] = alerts
-
-    # --- Normal Ranges ---
-    normal_match = re.search(r"###\s*Normal Ranges(.*?)(?=###|$)", text, re.S | re.I)
-    if normal_match:
-        normal_block = normal_match.group(1)
-        for match in re.findall(r"-\s*([^:]+):\s*([^\n]+)", normal_block):
-            biomarker, rng = match
-            data["normal_ranges"][biomarker.strip()] = rng.strip()
-
-    # --- Tabular Mapping ---
-    table_match = re.search(r"###\s*Tabular Mapping(.*)", text, re.S | re.I)
-    if table_match:
-        table_block = table_match.group(1)
-        # robust row matcher: capture any table rows with 5 pipe-separated columns
-        table_pattern = r"\|\s*([^|]+)\s*\|\s*([^|]+)\s*\|\s*([^|]+)\s*\|\s*([^|]+)\s*\|\s*([^|]+)\s*\|"
-        for biomarker, value, status, insight, ref in re.findall(table_pattern, table_block):
-            # normalize
-            biomarker_s = biomarker.strip()
-            value_s = value.strip()
-            status_s = status.strip()
-            insight_s = insight.strip()
-            ref_s = ref.strip()
-
-            # ---------- ONLY SKIP rows where ALL five fields are empty ----------
-            if not any([biomarker_s, value_s, status_s, insight_s, ref_s]):
-                # This is the empty-row you showed: skip it and continue
-                continue
-
-            # ---------- ALSO SKIP rows that are pure separator artifacts ----------
-            # e.g., ":-----------" or "--------" in biomarker column (common AI artifacts)
-            def is_separator_cell(s: str) -> bool:
-                # treat as separator if contains no alphanumeric chars
-                return not bool(re.search(r"[A-Za-z0-9]", s))
-
-            if all(is_separator_cell(c) for c in [biomarker_s, value_s, status_s, insight_s, ref_s]):
-                continue
-
-            # ---------- Append the cleaned/valid row ----------
-            data["biomarker_table"].append({
-                "biomarker": biomarker_s,
-                "value": value_s,
-                "status": status_s,
-                "insight": insight_s,
-                "reference_range": ref_s,
-            })
 
     return data
 
@@ -433,4 +386,5 @@ make it detailed
         return cleaned_output
 
     except Exception as e:
+
         raise HTTPException(status_code=500, detail=f"Prediction error: {str(e)}")
